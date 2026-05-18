@@ -71,8 +71,24 @@ export class SmplApi {
 
 			const transient = resp.status >= 500 && resp.status < 600;
 			if (transient && attempt < maxAttempts - 1) {
-				await new Promise((r) => setTimeout(r, backoffMs[attempt]));
-				continue;
+				// Honor Cloudflare's retryable:false signal (e.g. error 1102,
+				// "worker exceeded resources") — retrying just hits the same
+				// CPU/memory wall and worsens the overload.
+				let retryable = true;
+				try {
+					const j = resp.json as
+						| { retryable?: boolean; error_code?: number }
+						| undefined;
+					if (j && (j.retryable === false || j.error_code === 1102)) {
+						retryable = false;
+					}
+				} catch {
+					/* not JSON */
+				}
+				if (retryable) {
+					await new Promise((r) => setTimeout(r, backoffMs[attempt]));
+					continue;
+				}
 			}
 
 			let bodyMsg = resp.text ?? "";
