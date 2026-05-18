@@ -1,0 +1,11 @@
+{
+	"id": "smpl-sync",
+	"name": "SMPL Sync",
+	"version": "0.1.0",
+	"minAppVersion": "1.5.0",
+	"description": "Sync your Obsidian vault to smpl.rip across desktop and mobile.",
+	"author": "smpl.rip",
+	"authorUrl": "https://smpl.rip",
+	"fundingUrl": "https://smpl.rip",
+	"isDesktopOnly": false
+}

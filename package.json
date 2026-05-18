@@ -1,0 +1,28 @@
+{
+	"name": "obsidian-smpl-sync",
+	"version": "0.1.0",
+	"description": "Sync your Obsidian vault to smpl.rip across desktop and mobile.",
+	"main": "main.js",
+	"scripts": {
+		"dev": "node esbuild.config.mjs",
+		"build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production && npm run build:checksums",
+		"build:checksums": "node scripts/generate-checksums.mjs",
+		"version": "node version-bump.mjs && git add manifest.json versions.json"
+	},
+	"keywords": [
+		"obsidian",
+		"obsidian-plugin",
+		"sync",
+		"smpl"
+	],
+	"author": "smpl.rip",
+	"license": "MIT",
+	"devDependencies": {
+		"@types/node": "^20.11.0",
+		"builtin-modules": "^3.3.0",
+		"esbuild": "^0.21.0",
+		"obsidian": "latest",
+		"tslib": "^2.6.2",
+		"typescript": "^5.4.0"
+	}
+}

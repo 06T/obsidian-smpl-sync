@@ -1,0 +1,50 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Package release zip
+        id: pkg
+        run: |
+          tag="${GITHUB_REF##*/}"
+          assets=(main.js manifest.json)
+          if [ -f styles.css ]; then assets+=(styles.css); fi
+          zip "obsidian-smpl-sync-${tag}.zip" "${assets[@]}"
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+          echo "zip=obsidian-smpl-sync-${tag}.zip" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.pkg.outputs.tag }}
+          name: ${{ steps.pkg.outputs.tag }}
+          draft: false
+          prerelease: false
+          files: |
+            main.js
+            manifest.json
+            ${{ steps.pkg.outputs.zip }}
