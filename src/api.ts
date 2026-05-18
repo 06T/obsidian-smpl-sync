@@ -38,16 +38,7 @@ export class SmplApi {
 	}
 
 	private async send<T>(opts: RequestUrlParam): Promise<T> {
-		// Cloudflare Workers sometimes return 1102 (CPU exceeded) on cold starts
-		// when bcrypt-based API key verification overruns the per-request budget.
-		// A retry once the worker has warmed up almost always succeeds. We back
-		// off on 5xx and on the explicit "worker_exceeded_resources" body.
-		//
-		// SMPL-VS-001: only retry methods that are safe to replay. Non-idempotent
-		// writes (POST init, DELETE, POST rename) must fail-fast on 5xx — a
-		// silently-succeeded-but-reported-failed first attempt could double-apply
-		// the change on retry. The server makes `action=complete` idempotent, so
-		// it's safe to retry alongside GETs.
+		// Only retry methods that are safe to replay. complete is idempotent server-side.
 		const params: RequestUrlParam = { ...opts, throw: false };
 		const method = (opts.method ?? "GET").toUpperCase();
 		const urlStr = typeof opts.url === "string" ? opts.url : "";
@@ -92,7 +83,7 @@ export class SmplApi {
 					if (typeof err === "string") bodyMsg = err;
 				}
 			} catch {
-				// not JSON, keep text
+				/* not JSON */
 			}
 			throw new SmplApiError(resp.status, bodyMsg || `HTTP ${resp.status}`, resp.text);
 		}
@@ -141,7 +132,7 @@ export class SmplApi {
 		mtime: number;
 		mime: string;
 	}): Promise<InitResp> {
-		// Server's vault.php parses mtime via PHP strtotime() which requires an ISO 8601 string.
+		// Server expects mtime as ISO 8601.
 		const payload = { ...input, mtime: new Date(input.mtime).toISOString() };
 		return this.send<InitResp>({
 			url: this.url("init"),
@@ -184,10 +175,8 @@ export class SmplApi {
 	}
 
 	async download(vault: string, path: string): Promise<ArrayBuffer> {
-		// Server returns { url } pointing at a presigned R2 GET URL. We do NOT
-		// reuse `send()` for the R2 fetch — R2 rejects requests that carry an
-		// Authorization header alongside the X-Amz-Signature query param with
-		// "Missing x-amz-content-sha256". Doing two distinct calls avoids that.
+		// Two-step: get the presigned R2 URL, then fetch with no auth header
+		// (R2 rejects Authorization alongside its query-param signature).
 		const meta = await this.send<{ url: string }>({
 			url: this.url("download", { vault, path }),
 			method: "GET",

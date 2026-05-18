@@ -160,7 +160,6 @@ export class SyncEngine {
 
 		let finalRow: FileRow | undefined;
 		if ("skip" in init && init.skip) {
-			// nothing to upload; pull canonical row from server-side current state if needed
 			this.d.state.files[path] = {
 				sha,
 				mtime,
@@ -168,20 +167,13 @@ export class SyncEngine {
 					this.d.state.files[path]?.remoteUpdatedAt ?? new Date().toISOString(),
 			};
 		} else {
-			// SMPL-VS-002: forward whatever headers init returned verbatim. The
-			// server bakes `x-amz-checksum-sha256` into both the presigned URL's
-			// signed-header list AND this `headers` map, so R2 will reject the
-			// PUT if the body's sha256 doesn't match. If the header isn't
-			// present, the server hasn't been updated yet — warn so we notice,
-			// but continue (upload still works, just without R2-side checking).
+			// init.headers includes the signed x-amz-checksum-sha256 — forward verbatim.
 			const uploadHeaders = init.headers ?? {};
 			const hasChecksumHeader = Object.keys(uploadHeaders).some(
 				(k) => k.toLowerCase() === "x-amz-checksum-sha256"
 			);
 			if (!hasChecksumHeader) {
-				console.warn(
-					"smpl-sync: init.headers missing x-amz-checksum-sha256 — server may not yet honor the SMPL-VS-002 contract; upload will proceed without R2-side integrity check"
-				);
+				console.warn("smpl-sync: init.headers missing x-amz-checksum-sha256");
 			}
 			await this.d.api.uploadToR2(init.putUrl, uploadHeaders, buf);
 			finalRow = await this.d.api.complete(init.id);

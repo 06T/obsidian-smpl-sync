@@ -1,19 +1,20 @@
 #!/usr/bin/env bash
 # SMPL Sync — Obsidian plugin installer (macOS + Linux)
 #
-#   curl -fsSL https://smpl.rip/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/06T/obsidian-smpl-sync/main/install/install.sh | bash
 #
 # Flags:
 #   --vault PATH          install into a specific vault (skips picker)
 #   --from-local PATH     copy main.js/manifest.json from a local checkout
 #                         instead of downloading
-#   --release URL_BASE    base URL to download from (default: smpl.rip)
+#   --release URL_BASE    base URL to download from
+#                         (default: latest GitHub release assets)
 
 set -euo pipefail
 
 PLUGIN_ID="smpl-sync"
 PLUGIN_NAME="SMPL Sync"
-DEFAULT_RELEASE="https://smpl.rip/plugins/${PLUGIN_ID}/latest"
+DEFAULT_RELEASE="https://github.com/06T/obsidian-smpl-sync/releases/latest/download"
 
 VAULT_ARG=""
 FROM_LOCAL=""
@@ -35,7 +36,6 @@ bold() { printf '\033[1m%s\033[0m\n' "$1"; }
 dim()  { printf '\033[2m%s\033[0m\n' "$1"; }
 red()  { printf '\033[31m%s\033[0m\n' "$1" >&2; }
 
-# 1. Find Obsidian config
 case "$(uname -s)" in
   Darwin) CFG="$HOME/Library/Application Support/obsidian/obsidian.json" ;;
   Linux)  CFG="${XDG_CONFIG_HOME:-$HOME/.config}/obsidian/obsidian.json" ;;
@@ -48,7 +48,6 @@ if [[ ! -f "$CFG" ]]; then
   exit 1
 fi
 
-# 2. Pick vault
 if [[ -n "$VAULT_ARG" ]]; then
   VAULT="$VAULT_ARG"
 else
@@ -91,7 +90,6 @@ fi
 DEST="$VAULT/.obsidian/plugins/$PLUGIN_ID"
 mkdir -p "$DEST"
 
-# Pick a sha256 tool. macOS ships `shasum`; most Linux ships `sha256sum`.
 if command -v shasum >/dev/null 2>&1; then
   SHA_CMD="shasum -a 256"
 elif command -v sha256sum >/dev/null 2>&1; then
@@ -100,14 +98,12 @@ else
   SHA_CMD=""
 fi
 
-# Compute sha256 hex of $1 to stdout. Empty string if no tool available.
 sha256_of() {
   if [[ -z "$SHA_CMD" ]]; then echo ""; return; fi
   # shellcheck disable=SC2086
   $SHA_CMD "$1" | awk '{print $1}'
 }
 
-# 3. Fetch plugin files
 if [[ -n "$FROM_LOCAL" ]]; then
   bold "Copying from local build: $FROM_LOCAL"
   for f in main.js manifest.json; do
@@ -119,8 +115,7 @@ if [[ -n "$FROM_LOCAL" ]]; then
   if [[ -f "$FROM_LOCAL/styles.css" ]]; then
     cp "$FROM_LOCAL/styles.css" "$DEST/styles.css"
   fi
-  # SMPL-VS-003: --from-local is developer mode; skip SHA verification because
-  # local builds aren't expected to match the published SHA256SUMS.txt.
+  # Dev mode: SHA verification skipped.
 else
   bold "Downloading from $RELEASE"
   TMPDIR_DL="$(mktemp -d)"
@@ -131,7 +126,6 @@ else
     exit 1
   fi
 
-  # SMPL-VS-003: download SHA256SUMS.txt first, then verify each artifact.
   if ! curl -fsSL "$RELEASE/SHA256SUMS.txt" -o "$TMPDIR_DL/SHA256SUMS.txt"; then
     red "Failed to download $RELEASE/SHA256SUMS.txt — refusing to install unverified files."
     exit 1
@@ -156,13 +150,10 @@ else
     fi
   done
 
-  # Verified — copy into place.
   cp "$TMPDIR_DL/main.js" "$DEST/main.js"
   cp "$TMPDIR_DL/manifest.json" "$DEST/manifest.json"
 
-  # styles.css is optional. Only fetch it if it's listed in SHA256SUMS.txt —
-  # otherwise smpl.rip's SPA fallback returns 200 with HTML, which curl would
-  # cheerfully save as styles.css. Check first, then verify like the others.
+  # styles.css is optional and only fetched if listed in the manifest.
   if awk '$2 == "styles.css"' "$TMPDIR_DL/SHA256SUMS.txt" | grep -q .; then
     if curl -fsSL "$RELEASE/styles.css" -o "$TMPDIR_DL/styles.css"; then
       expected="$(awk -v target="styles.css" '$2 == target { print $1 }' "$TMPDIR_DL/SHA256SUMS.txt")"

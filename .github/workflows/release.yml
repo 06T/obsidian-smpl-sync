@@ -47,4 +47,5 @@ jobs:
           files: |
             main.js
             manifest.json
+            SHA256SUMS.txt
             ${{ steps.pkg.outputs.zip }}

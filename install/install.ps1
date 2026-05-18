@@ -1,6 +1,6 @@
 # SMPL Sync - Obsidian plugin installer (Windows)
 #
-#   iwr -useb https://smpl.rip/install.ps1 | iex
+#   iwr -useb https://raw.githubusercontent.com/06T/obsidian-smpl-sync/main/install/install.ps1 | iex
 #
 # Or download and run with:
 #   powershell -ExecutionPolicy Bypass -File install.ps1
@@ -8,13 +8,14 @@
 # Flags:
 #   -Vault PATH          Install into a specific vault (skips picker)
 #   -FromLocal PATH      Copy main.js/manifest.json from a local checkout
-#   -Release URL_BASE    Base URL to download from (default: smpl.rip)
+#   -Release URL_BASE    Base URL to download from
+#                        (default: latest GitHub release assets)
 
 [CmdletBinding()]
 param(
     [string]$Vault,
     [string]$FromLocal,
-    [string]$Release = "https://smpl.rip/plugins/smpl-sync/latest"
+    [string]$Release = "https://github.com/06T/obsidian-smpl-sync/releases/latest/download"
 )
 
 $ErrorActionPreference = "Stop"
@@ -25,7 +26,6 @@ function Write-Bold($msg) { Write-Host $msg -ForegroundColor White }
 function Write-Dim($msg)  { Write-Host $msg -ForegroundColor DarkGray }
 function Write-Err($msg)  { Write-Host $msg -ForegroundColor Red }
 
-# 1. Find Obsidian config
 $cfg = Join-Path $env:APPDATA "obsidian\obsidian.json"
 if (-not (Test-Path $cfg)) {
     Write-Err "Obsidian config not found at: $cfg"
@@ -33,12 +33,10 @@ if (-not (Test-Path $cfg)) {
     exit 1
 }
 
-# 2. Pick vault
 if (-not $Vault) {
     $config = Get-Content $cfg -Raw | ConvertFrom-Json
     $vaults = @()
     if ($config.vaults) {
-        # vaults is a hashtable keyed by hash; values have .path
         foreach ($prop in $config.vaults.PSObject.Properties) {
             $p = $prop.Value.path
             if ($p) { $vaults += $p }
@@ -76,7 +74,6 @@ if (-not (Test-Path $Vault)) {
 $dest = Join-Path $Vault ".obsidian\plugins\$PluginId"
 New-Item -ItemType Directory -Force -Path $dest | Out-Null
 
-# 3. Fetch plugin files
 if ($FromLocal) {
     Write-Bold "Copying from local build: $FromLocal"
     foreach ($f in @("main.js", "manifest.json")) {
@@ -91,14 +88,11 @@ if ($FromLocal) {
     if (Test-Path $css) {
         Copy-Item $css (Join-Path $dest "styles.css") -Force
     }
-    # SMPL-VS-003: -FromLocal is developer mode; skip SHA verification because
-    # local builds aren't expected to match the published SHA256SUMS.txt.
 } else {
     Write-Bold "Downloading from $Release"
     $tmp = Join-Path ([System.IO.Path]::GetTempPath()) ([System.IO.Path]::GetRandomFileName())
     New-Item -ItemType Directory -Force -Path $tmp | Out-Null
     try {
-        # SMPL-VS-003: download SHA256SUMS.txt first, then verify each artifact.
         $sumsPath = Join-Path $tmp "SHA256SUMS.txt"
         try {
             Invoke-WebRequest -Uri "$Release/SHA256SUMS.txt" -OutFile $sumsPath -UseBasicParsing -ErrorAction Stop
@@ -107,12 +101,10 @@ if ($FromLocal) {
             exit 1
         }
 
-        # Parse SHA256SUMS.txt into a hashtable of filename -> expected hex hash.
         $expectedMap = @{}
         foreach ($line in Get-Content $sumsPath) {
             $line = $line.Trim()
             if ($line -eq "") { continue }
-            # Format: "<hex>  <filename>"  (two spaces; we just split on whitespace)
             $parts = $line -split '\s+', 2
             if ($parts.Count -eq 2) {
                 $expectedMap[$parts[1]] = $parts[0].ToLower()
@@ -143,13 +135,9 @@ if ($FromLocal) {
             }
         }
 
-        # Verified - copy into place.
         Copy-Item (Join-Path $tmp "main.js") (Join-Path $dest "main.js") -Force
         Copy-Item (Join-Path $tmp "manifest.json") (Join-Path $dest "manifest.json") -Force
 
-        # styles.css is optional. Only fetch it if it's listed in SHA256SUMS.txt —
-        # smpl.rip's SPA fallback returns 200 with HTML for missing static files,
-        # which Invoke-WebRequest would save verbatim. Check the manifest first.
         if ($expectedMap.ContainsKey("styles.css")) {
             $cssDl = Join-Path $tmp "styles.css"
             try {
